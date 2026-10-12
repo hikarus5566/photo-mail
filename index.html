@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>照片寄信</title>
+<meta name="theme-color" content="#14a37f">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="照片寄信">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1f2937;--mute:#6b7280;--line:#e5e7eb;--pri:#14a37f;--ok:#16a34a;--err:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#111318;--card:#1b1e25;--ink:#e5e7eb;--mute:#9ca3af;--line:#2d3139}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,"PingFang TC","Microsoft JhengHei",sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 16px;display:flex;justify-content:space-between;align-items:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px;color:var(--mute)}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;background:var(--pri);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--pri);border:1px solid var(--line)}
+button:disabled{opacity:.5}
+.big{width:100%;padding:14px;font-size:17px}
+input,select,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+.row>*{flex:1}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px}
+.seg label{flex:1;text-align:center;padding:9px;cursor:pointer}
+.seg input{display:none}
+.seg input:checked+span{color:var(--pri);font-weight:600}
+.seg label:has(input:checked){background:color-mix(in srgb,var(--pri) 12%,transparent)}
+#drop{display:block;border:2px dashed var(--line);border-radius:12px;padding:20px;text-align:center;color:var(--mute);cursor:pointer}
+#drop.on{border-color:var(--pri)}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:12px}
+.th{position:relative;font-size:12px;color:var(--mute);text-align:center}
+.th img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--line)}
+.th b{position:absolute;top:2px;right:2px;background:#0009;color:#fff;border-radius:50%;width:22px;height:22px;line-height:22px;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:14px;cursor:pointer}
+.chip i{font-style:normal;margin-left:6px;color:var(--mute)}
+#msg{margin-top:10px;font-weight:600}
+.ok{color:var(--ok)}.err{color:var(--err)}.mute{color:var(--mute);font-size:14px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1><span style="display:flex;align-items:center;gap:8px"><img src="icon-192.png" width="32" height="32" style="border-radius:8px"> 照片寄信</span> <button id="logout" class="ghost hide">登出</button></h1>
+
+<section id="loginBox" class="card">
+  <p>請用你的 Google 帳號登入。</p>
+  <button id="login" class="big">用 Google 登入</button>
+  <p id="loginMsg" class="err"></p>
+</section>
+
+<div id="app" class="hide">
+<section class="card">
+  <h2>1. 選照片</h2>
+  <label id="drop" for="file">點這裡選照片（電腦也可以直接拖曳進來）</label>
+  <input id="file" type="file" accept="image/*,.heic,.heif" multiple style="position:absolute;width:1px;height:1px;opacity:0">
+  <div id="thumbs" class="thumbs"></div>
+</section>
+
+<section class="card">
+  <h2>2. 格式與大小</h2>
+  <div class="seg">
+    <label><input type="radio" name="fmt" value="jpg" checked><span>JPG</span></label>
+    <label><input type="radio" name="fmt" value="png"><span>PNG</span></label>
+    <label><input type="radio" name="fmt" value="pdf"><span>PDF（合併）</span></label>
+  </div>
+  <div class="seg">
+    <label><input type="radio" name="mode" value="size" checked><span>依檔案大小</span></label>
+    <label><input type="radio" name="mode" value="px"><span>依像素尺寸</span></label>
+  </div>
+  <div id="sizeOpt" class="row"><span>每張不超過</span><input id="maxMB" type="number" value="1" min="0.1" step="0.1"><span>MB</span></div>
+  <div id="pxOpt" class="row hide">
+    <select id="pxSel">
+      <option value="640x480">640 × 480</option><option value="800x600">800 × 600</option>
+      <option value="1024x768">1024 × 768</option><option value="1280x720">1280 × 720</option>
+      <option value="1920x1080">1920 × 1080</option>
+      <option value="0.5">縮成一半</option><option value="custom">自訂寬 × 高…</option><option value="1">原尺寸</option>
+    </select>
+  </div>
+  <div id="pxCustomRow" class="row hide">
+    <input id="pxW" type="number" placeholder="寬，例如 640"><span style="flex:0">×</span><input id="pxH" type="number" placeholder="高，例如 480">
+  </div>
+  <div id="pxNote" class="mute hide" style="margin-bottom:8px">照片會等比例縮到這個框內，不會變形；直拍照片會自動換成直的（例如 480 × 640）。
+  </div>
+  <p id="est" class="mute"></p>
+</section>
+
+<section class="card">
+  <h2>3. 寄給誰</h2>
+  <input id="to" type="email" placeholder="收件信箱（多個用逗號分隔）">
+  <div class="chips" id="favs"></div>
+  <div class="row" style="margin-top:8px"><button class="ghost" id="addFav">＋ 把目前信箱存成常用</button></div>
+  <input id="subj" placeholder="主旨" style="margin-bottom:8px">
+  <textarea id="body" rows="3" placeholder="內文（可留空）"></textarea>
+</section>
+
+<button id="send" class="big">寄出</button>
+<p id="msg"></p>
+</div>
+</main>
+
+<script>
+// ====== 設定（由 Claude 幫你填） ======
+const CLIENT_ID = "請貼上_CLIENT_ID";          // Google 登入設定的代碼
+const ALLOWED_HASH = "6fbe40cb85c4225ce28868dc8c0113292196ed864595db58ff5aef9d9022dc70"; // 只有這個帳號能用（信箱經過加密，不會公開）
+// =====================================
+const SCOPES = "openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.appdata";
+const $ = s => document.querySelector(s);
+let token = null, me = "", photos = [], favs = [], favFileId = null, tokenClient;
+
+// ---------- 登入 ----------
+function initAuth(){
+  if(!window.google?.accounts){ return setTimeout(initAuth,200); }
+  tokenClient = google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID, scope:SCOPES, callback:onToken});
+}
+async function onToken(r){
+  if(r.error){ $("#loginMsg").textContent="登入失敗："+r.error; return; }
+  token = r.access_token;
+  const u = await api("https://www.googleapis.com/oauth2/v3/userinfo");
+  const hb = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(u.email.toLowerCase()));
+  const hx = [...new Uint8Array(hb)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  if(hx!==ALLOWED_HASH){
+    token=null; $("#loginMsg").textContent="這個帳號沒有使用權限。"; return;
+  }
+  me = u.email;
+  $("#loginBox").classList.add("hide"); $("#app").classList.remove("hide"); $("#logout").classList.remove("hide");
+  loadFavs();
+}
+$("#login").onclick = () => { if(CLIENT_ID.startsWith("請")) return demoMode(); tokenClient.requestAccessToken(); };
+$("#logout").onclick = () => { if(token) google.accounts.oauth2.revoke(token); location.reload(); };
+function demoMode(){ // 尚未設定登入時，可先試用轉檔功能
+  $("#loginBox").classList.add("hide"); $("#app").classList.remove("hide");
+  favs = JSON.parse(localStorage.getItem("favs")||"[]"); drawFavs();
+  say("目前是試用模式：可以測試選照片與轉檔，「寄出」會改成下載檔案。","mute");
+}
+async function api(url,opt={}){
+  opt.headers = Object.assign({Authorization:"Bearer "+token}, opt.headers||{});
+  const r = await fetch(url,opt);
+  if(r.status===401){ say("登入已過期，請重新登入。","err"); tokenClient.requestAccessToken(); throw new Error("401"); }
+  if(!r.ok) throw new Error(await r.text());
+  return r.status===204?null:r.json();
+}
+
+// ---------- 常用信箱（存在 Google 雲端硬碟隱藏區） ----------
+async function loadFavs(){
+  try{
+    const l = await api("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='favs.json'&fields=files(id)");
+    if(l.files.length){ favFileId=l.files[0].id;
+      favs = await api(`https://www.googleapis.com/drive/v3/files/${favFileId}?alt=media`); }
+  }catch(e){ favs = JSON.parse(localStorage.getItem("favs")||"[]"); }
+  drawFavs();
+}
+async function saveFavs(){
+  localStorage.setItem("favs",JSON.stringify(favs)); drawFavs();
+  if(!token) return;
+  const meta = favFileId?{}:{name:"favs.json",parents:["appDataFolder"]};
+  const fd = new FormData();
+  fd.append("metadata",new Blob([JSON.stringify(meta)],{type:"application/json"}));
+  fd.append("file",new Blob([JSON.stringify(favs)],{type:"application/json"}));
+  const url = favFileId?`https://www.googleapis.com/upload/drive/v3/files/${favFileId}?uploadType=multipart`
+                       :"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+  const r = await api(url,{method:favFileId?"PATCH":"POST",body:fd}); favFileId=r.id;
+}
+function drawFavs(){
+  $("#favs").innerHTML="";
+  favs.forEach((f,i)=>{ const c=document.createElement("span"); c.className="chip"; c.textContent=f;
+    const x=document.createElement("i"); x.textContent="✕"; x.onclick=e=>{e.stopPropagation(); if(confirm("刪除 "+f+"？")){favs.splice(i,1);saveFavs();}};
+    c.onclick=()=>{ const t=$("#to").value.trim(); $("#to").value = t? (t.split(/\s*,\s*/).includes(f)?t:t+", "+f) : f; };
+    c.append(x); $("#favs").append(c); });
+}
+$("#addFav").onclick=()=>{ const list=$("#to").value.split(",").map(s=>s.trim()).filter(okMail);
+  if(!list.length) return say("請先輸入正確的信箱。","err");
+  list.forEach(m=>{ if(!favs.includes(m)) favs.push(m); }); saveFavs(); say("已存成常用信箱。","ok"); };
+
+// ---------- 選照片 ----------
+$("#file").onchange=e=>addFiles(e.target.files);
+["dragover","dragenter"].forEach(t=>$("#drop").addEventListener(t,e=>{e.preventDefault();$("#drop").classList.add("on");}));
+["dragleave","drop"].forEach(t=>$("#drop").addEventListener(t,e=>{e.preventDefault();$("#drop").classList.remove("on");}));
+$("#drop").addEventListener("drop",e=>addFiles(e.dataTransfer.files));
+async function addFiles(list){
+  list=[...list]; let done=0, bad=[];
+  say(`讀取照片中… 0 / ${list.length}`,"mute");
+  await Promise.all(list.map(async f=>{
+    try{
+      let img;
+      try{ img = await loadImg(f); }                       // 多數手機會自動把 HEIC 轉成 JPG
+      catch(e){
+        if(!window.heic2any) throw e;                       // 電腦上的 HEIC 才需要轉
+        let b = await heic2any({blob:f,toType:"image/jpeg",quality:0.92}); if(Array.isArray(b)) b=b[0];
+        img = await loadImg(b);
+      }
+      photos.push({name:f.name.replace(/\.[^.]+$/,""), img, url:img.src});
+    }catch(e){ bad.push(f.name); }
+    say(`讀取照片中… ${++done} / ${list.length}`,"mute");
+  }));
+  $("#file").value=""; drawThumbs(); estimate();
+  say(bad.length? "這些照片無法讀取："+bad.join("、") : "", bad.length?"err":"");
+}
+const withTimeout=(p,ms)=>Promise.race([p,new Promise((_,no)=>setTimeout(()=>no(new Error("timeout")),ms))]);
+function loadVia(src){ return withTimeout(new Promise((ok,no)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=src; }),15000); }
+async function loadImg(blob){
+  try{ return await loadVia(URL.createObjectURL(blob)); }
+  catch(e){ return await loadVia(await blobToDataURL(blob)); }  // 備用讀法
+}
+function drawThumbs(){
+  $("#thumbs").innerHTML="";
+  photos.forEach((p,i)=>{ const d=document.createElement("div"); d.className="th";
+    d.innerHTML=`<img src="${p.url}"><b>✕</b><div>${p.img.naturalWidth}×${p.img.naturalHeight}</div>`;
+    d.querySelector("b").onclick=()=>{photos.splice(i,1);drawThumbs();estimate();}; $("#thumbs").append(d); });
+}
+
+// ---------- 格式與大小 ----------
+const val = n => document.querySelector(`input[name=${n}]:checked`).value;
+document.querySelectorAll("input[name=mode]").forEach(r=>r.onchange=()=>{
+  $("#sizeOpt").classList.toggle("hide",val("mode")!=="size"); $("#pxOpt").classList.toggle("hide",val("mode")!=="px"); pxUI(); estimate(); });
+function pxUI(){ const on=val("mode")==="px", v=$("#pxSel").value;
+  $("#pxCustomRow").classList.toggle("hide",!(on&&v==="custom"));
+  $("#pxNote").classList.toggle("hide",!(on&&(v==="custom"||v.includes("x")))); }
+$("#pxSel").onchange=()=>{ pxUI(); estimate(); };
+["#maxMB","#pxW","#pxH"].forEach(s=>$(s).oninput=estimate);
+document.querySelectorAll("input[name=fmt]").forEach(r=>r.onchange=estimate);
+
+function draw(img,scale){
+  const c=document.createElement("canvas");
+  c.width=Math.max(1,Math.round(img.naturalWidth*scale)); c.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height); return c;
+}
+const toBlob=(c,type,q)=>new Promise(r=>c.toBlob(r,type,q));
+function pxScale(img){
+  const w=img.naturalWidth, h=img.naturalHeight, v=$("#pxSel").value;
+  if(v==="0.5") return .5; if(v==="1") return 1;
+  let W,H; if(v==="custom"){ W=+$("#pxW").value; H=+$("#pxH").value; if(!W&&!H) return 1; W=W||1e9; H=H||1e9; }
+  else [W,H]=v.split("x").map(Number);
+  if((w>=h)!==(W>=H)) [W,H]=[H,W];      // 直拍照片自動轉向
+  return Math.min(1,W/w,H/h);
+}
+// 處理一張照片 → 回傳 {blob, w, h}
+async function processOne(img, fmt){
+  const type = fmt==="png"?"image/png":"image/jpeg";
+  if(val("mode")==="px"){ const c=draw(img,pxScale(img)); return {blob:await toBlob(c,type,0.9),c}; }
+  const max = (+$("#maxMB").value||1)*1024*1024;
+  let scale=1, c=draw(img,1);
+  for(let round=0; round<12; round++){
+    if(type==="image/jpeg"){
+      for(const q of [0.92,0.85,0.75,0.65,0.55]){ const b=await toBlob(c,type,q); if(b.size<=max) return {blob:b,c}; }
+    }else{ const b=await toBlob(c,type); if(b.size<=max) return {blob:b,c}; }
+    scale*=0.8; c=draw(img,scale);
+  }
+  return {blob:await toBlob(c,type,0.5),c};
+}
+async function buildFiles(){
+  const fmt=val("fmt"), out=[];
+  if(fmt==="pdf"){
+    const { jsPDF } = window.jspdf; let pdf;
+    for(const p of photos){
+      const {blob,c} = await processOne(p.img,"jpg");
+      const data = await blobToDataURL(blob), o = c.width>c.height?"l":"p";
+      if(!pdf) pdf=new jsPDF({orientation:o,unit:"px",format:[c.width,c.height]}); else pdf.addPage([c.width,c.height],o);
+      pdf.addImage(data,"JPEG",0,0,c.width,c.height);
+    }
+    out.push({name:`照片_${today()}.pdf`, blob:pdf.output("blob"), type:"application/pdf"});
+  }else{
+    for(const p of photos){ const {blob}=await processOne(p.img,fmt); out.push({name:`${p.name}.${fmt}`,blob,type:blob.type}); }
+  }
+  return out;
+}
+let estTimer;
+function estimate(){ clearTimeout(estTimer); if(!photos.length){$("#est").textContent="";return;}
+  estTimer=setTimeout(async()=>{ $("#est").textContent="計算大小中…";
+    const files=await buildFiles(); const t=files.reduce((s,f)=>s+f.blob.size,0);
+    $("#est").textContent=`處理後：${files.length} 個檔案，共 ${mb(t)}`+(t>24*1024*1024?"（超過 Gmail 上限約 25MB，請壓小一點或分開寄）":""); },400); }
+
+// ---------- 寄出 ----------
+const okMail = s=>/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(s);
+const today = ()=>new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Taipei"});
+const mb = n=>(n/1024/1024).toFixed(2)+" MB";
+const b64utf8 = s=>btoa(unescape(encodeURIComponent(s)));
+const enc = s=>`=?UTF-8?B?${b64utf8(s)}?=`;
+function blobToDataURL(b){ return new Promise(r=>{const f=new FileReader(); f.onload=()=>r(f.result); f.readAsDataURL(b);}); }
+async function blobToB64(b){ return (await blobToDataURL(b)).split(",")[1].replace(/.{76}/g,"$&\r\n"); }
+
+$("#subj").value = "照片 "+today();
+$("#send").onclick = async ()=>{
+  const to=$("#to").value.split(",").map(s=>s.trim()).filter(Boolean);
+  if(!photos.length) return say("請先選照片。","err");
+  if(!to.length || !to.every(okMail)) return say("收件信箱格式不正確，請檢查。","err");
+  $("#send").disabled=true; say("處理照片中…","mute");
+  try{
+    const files=await buildFiles(); const total=files.reduce((s,f)=>s+f.blob.size,0);
+    if(total>24*1024*1024) throw new Error("附件共 "+mb(total)+"，超過 Gmail 上限約 25MB。");
+    if(!token){ files.forEach(f=>{const a=document.createElement("a");a.href=URL.createObjectURL(f.blob);a.download=f.name;a.click();});
+      return say("試用模式：已下載處理好的檔案。","ok"); }
+    say("寄送中…","mute");
+    const bd="b"+Math.random().toString(36).slice(2);
+    let m=`From: ${me}\r\nTo: ${to.join(", ")}\r\nSubject: ${enc($("#subj").value||"照片")}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="${bd}"\r\n\r\n`;
+    m+=`--${bd}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64utf8($("#body").value||" ")}\r\n`;
+    for(const f of files){
+      m+=`--${bd}\r\nContent-Type: ${f.type}; name="${enc(f.name)}"\r\nContent-Disposition: attachment; filename="${enc(f.name)}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${await blobToB64(f.blob)}\r\n`;
+    }
+    m+=`--${bd}--`;
+    await api("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media",
+      {method:"POST",headers:{"Content-Type":"message/rfc822"},body:m});
+    say(`✅ 已送出（${files.length} 個檔案，${mb(total)}）`,"ok");
+  }catch(e){ if(e.message!=="401") say("寄送失敗："+e.message,"err"); }
+  finally{ $("#send").disabled=false; }
+};
+function say(t,cls=""){ $("#msg").textContent=t; $("#msg").className=cls; }
+initAuth();
+</script>
+</body>
+</html>
