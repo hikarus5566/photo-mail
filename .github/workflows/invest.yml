@@ -1,0 +1,39 @@
+name: invest-alert
+
+on:
+  schedule:
+    # UTC 時間；台灣 = UTC+8。平日台股 08:30、14:00，美股 21:00、05:30（台灣時間）
+    - cron: "30 0 * * 1-5"
+    - cron: "0 6 * * 1-5"
+    - cron: "0 13 * * 1-5"
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      always:
+        description: "沒觸發也推送完整報告"
+        type: boolean
+        default: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r invest/requirements.txt
+      - uses: actions/cache/restore@v4
+        with:
+          path: invest/state.json
+          key: invest-state-${{ github.run_id }}
+          restore-keys: invest-state-
+      - run: python invest/notify.py ${{ inputs.always && '--always' || '' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: invest/state.json
+          key: invest-state-${{ github.run_id }}

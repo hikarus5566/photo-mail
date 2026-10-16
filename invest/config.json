@@ -1,0 +1,17 @@
+{
+  "watchlist": {
+    "0050.TW": "元大台灣50",
+    "2330.TW": "台積電",
+    "VOO": "Vanguard S&P 500",
+    "QQQ": "Invesco Nasdaq 100",
+    "NVDA": "NVIDIA"
+  },
+  "indicators": {
+    "^TWII": "台股加權指數",
+    "^GSPC": "S&P 500",
+    "^SOX": "費城半導體",
+    "^VIX": "VIX 恐慌指數",
+    "^TNX": "美 10 年期殖利率"
+  },
+  "cooldown_hours": 72
+}
